@@ -15,7 +15,7 @@ class Proposer(Agent):
         self.last_tried: Optional[Ballot] = None
         self.responses: List[Optional[Vote]] = list()
 
-    def start(self, event):
+    def start(self, event: Event):
         print(f"Agent #{self.id} started ({self.__class__.__name__})")
         # This definition for t0 allows the first ballot to be initiated 5 seconds after the Agent is started
         t0 = datetime.now() - self.period + timedelta(seconds=5)
@@ -164,6 +164,6 @@ class Assembly:
 
 if __name__ == '__main__':
     messenger = UnreliableMessenger(failure_prob=.05, avg_delay=1)
-    assembly = Assembly(n_proposers=1, n_acceptors=1)
+    assembly = Assembly(n_proposers=1, n_acceptors=5, messenger=messenger)
     result = assembly.start()
     print(result)

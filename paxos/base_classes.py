@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from threading import Event
 from datetime import datetime
 from abc import ABC, abstractmethod
 from enum import Enum, auto
@@ -106,12 +107,12 @@ class UnreliableMessenger(Messenger):
         else:
             return None
 
-    async def _start(self, event):
+    async def _start(self, event: Event):
         while not event.is_set():
             if sum(self.to_deliver.values(), []):
                 print("[Messenger] Entrée boucle while")
                 to_do = []
-                for id_ in self.to_deliver:
+                for id_ in self.to_deliver.copy():
                     for message in self.to_deliver[id_]:
                         print(f"[Messenger] [{datetime.now()}] Message à délivrer :", message)
 
@@ -127,7 +128,7 @@ class UnreliableMessenger(Messenger):
                 print(f"[Messenger] [{datetime.now()}]", len(to_do), "messages à délivrer")
                 await asyncio.gather(*to_do)
 
-    def start(self, event):
+    def start(self, event: Event):
         loop = asyncio.new_event_loop()
         loop.run_until_complete(self._start(event))
         loop.close()
@@ -142,7 +143,7 @@ class Agent(ABC):
         self.id = Agent.counter
         Agent.counter += 1
 
-    def start(self, event) -> None:
+    def start(self, event: Event) -> None:
         print(f"Agent #{self.id} started ({self.__class__.__name__})")
         while not event.is_set():
             message = self.messenger.get_message(self.id)
