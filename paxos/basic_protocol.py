@@ -163,7 +163,7 @@ class Assembly:
 
 
 if __name__ == '__main__':
-    messenger = UnreliableMessenger(failure_prob=.05, avg_delay=1)
-    assembly = Assembly(n_proposers=1, n_acceptors=5, messenger=messenger)
+    messenger = UnreliableMessenger(failure_prob=0, avg_delay=1)
+    assembly = Assembly(n_proposers=1, n_acceptors=2, messenger=messenger)
     result = assembly.start()
     print(result)

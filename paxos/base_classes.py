@@ -107,24 +107,21 @@ class UnreliableMessenger(Messenger):
         else:
             return None
 
+    async def deliver_message(self, dest: int, message: Message):
+        print(f"[Messenger] [{datetime.now()}] Debut du transfert :", message)
+        delay = self.avg_delay * exponential()
+        await asyncio.sleep(delay)
+        self.delivered[dest].append(message)
+        self.to_deliver[dest].remove(message)
+        print(f"[Messenger] [{datetime.now()}] Fin du transfert :", message)
+
     async def _start(self, event: Event):
         while not event.is_set():
             if sum(self.to_deliver.values(), []):
-                print("[Messenger] Entrée boucle while")
                 to_do = []
                 for id_ in self.to_deliver.copy():
                     for message in self.to_deliver[id_]:
-                        print(f"[Messenger] [{datetime.now()}] Message à délivrer :", message)
-
-                        async def deliver_message():
-                            print(f"[Messenger] [{datetime.now()}] Transfert du message", message, 'en cours')
-                            delay = self.avg_delay * exponential()
-                            await asyncio.sleep(delay)
-                            self.delivered[id_].append(message)
-                            self.to_deliver[id_].remove(message)
-                            print(f"[Messenger] [{datetime.now()}] Transfert du message", message, 'terminé')
-
-                        to_do.append(deliver_message())
+                        to_do.append(self.deliver_message(id_, message))
                 print(f"[Messenger] [{datetime.now()}]", len(to_do), "messages à délivrer")
                 await asyncio.gather(*to_do)
 
