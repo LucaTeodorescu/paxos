@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Any, Set, Optional
@@ -105,20 +106,31 @@ class UnreliableMessenger(Messenger):
         else:
             return None
 
-    async def start(self):
-        while True:
-            to_do = []
-            for id_, messages in self.to_deliver.items():
-                for message in messages:
-                    delay = self.avg_delay * exponential()
+    async def _start(self, event):
+        while not event.is_set():
+            if sum(self.to_deliver.values(), []):
+                print("[Messenger] Entrée boucle while")
+                to_do = []
+                for id_ in self.to_deliver:
+                    for message in self.to_deliver[id_]:
+                        print(f"[Messenger] [{datetime.now()}] Message à délivrer :", message)
 
-                    async def coro():
-                        await asyncio.sleep(delay)
-                        self.delivered[id_].append(message)
+                        async def deliver_message():
+                            print(f"[Messenger] [{datetime.now()}] Transfert du message", message, 'en cours')
+                            delay = self.avg_delay * exponential()
+                            await asyncio.sleep(delay)
+                            self.delivered[id_].append(message)
+                            self.to_deliver[id_].remove(message)
+                            print(f"[Messenger] [{datetime.now()}] Transfert du message", message, 'terminé')
 
-                    to_do.append(coro())
+                        to_do.append(deliver_message())
+                print(f"[Messenger] [{datetime.now()}]", len(to_do), "messages à délivrer")
+                await asyncio.gather(*to_do)
 
-            await asyncio.gather(*to_do)
+    def start(self, event):
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(self._start(event))
+        loop.close()
 
 
 class Agent(ABC):
@@ -130,9 +142,9 @@ class Agent(ABC):
         self.id = Agent.counter
         Agent.counter += 1
 
-    def start(self) -> None:
+    def start(self, event) -> None:
         print(f"Agent #{self.id} started ({self.__class__.__name__})")
-        while self.ledger is None:
+        while not event.is_set():
             message = self.messenger.get_message(self.id)
             if message is not None:
                 self.process_message(message)

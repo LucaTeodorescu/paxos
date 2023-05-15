@@ -1,5 +1,5 @@
 from __future__ import annotations
-from threading import Thread
+from threading import Thread, Event
 from datetime import timedelta, datetime
 from typing import List
 
@@ -15,14 +15,16 @@ class Proposer(Agent):
         self.last_tried: Optional[Ballot] = None
         self.responses: List[Optional[Vote]] = list()
 
-    def start(self):
+    def start(self, event):
         print(f"Agent #{self.id} started ({self.__class__.__name__})")
         # This definition for t0 allows the first ballot to be initiated 5 seconds after the Agent is started
         t0 = datetime.now() - self.period + timedelta(seconds=5)
-        while self.ledger is None:
+        while not event.is_set():
+            # The agent checks if it has received messages
             message = self.messenger.get_message(self.id)
             if message is not None:
                 self.process_message(message)
+            # And regularly starts a new ballot
             if datetime.now() - t0 >= self.period:
                 t0 = datetime.now()
                 self.initiate_new_ballot()
@@ -123,25 +125,36 @@ class Acceptor(Agent):
 
 
 class Assembly:
-    def __init__(self, n_proposers: int, n_acceptors: int):
-        self.messenger = ReliableMessenger()
+    def __init__(self, n_proposers: int, n_acceptors: int, messenger: Messenger = ReliableMessenger()):
+        self.messenger = messenger
         self.proposers = {Proposer(self.messenger, self) for _ in range(n_proposers)}
         self.acceptors = {Acceptor(self.messenger) for _ in range(n_acceptors)}
         self.learners = {}  # TODO: Implement learners
         # TODO: Implement failure of agents
-        self.threads = dict()
+        self.threads = list()
 
     @property
     def agents(self):
         return self.proposers.union(self.acceptors).union(self.learners)
 
     def start(self):
+        end = Event()
+        # We create a thread for the messenger if necessary
+        if isinstance(self.messenger, UnreliableMessenger):
+            # In this case, the messages are not delivered instantaneously
+            # The messenger needs its own thread so that it does not block the agents
+            self.threads.append(Thread(target=self.messenger.start, args=(end,), name="Messenger"))
+            self.threads[-1].start()
+        # And a thread for every agent
         for agent in self.agents:
-            self.threads[agent.id] = Thread(target=agent.start)
-            self.threads[agent.id].start()
+            self.threads.append(Thread(target=agent.start, args=(end,), name=f'Agent #{agent.id}'))
+            self.threads[-1].start()
 
-        for agent_id, thread in self.threads.items():
-            thread.join()
+        # We wait until a decision is made and all agents learn about it
+        while None in [agent.ledger for agent in self.agents]:
+            continue
+        # When it is the case, we stop all the threads
+        end.set()
 
         ledgers = set(agent.ledger.value for agent in self.agents)
         assert len(ledgers) == 1,\
@@ -150,6 +163,7 @@ class Assembly:
 
 
 if __name__ == '__main__':
-    assembly1 = Assembly(n_proposers=2, n_acceptors=5)
-    result = assembly1.start()
+    messenger = UnreliableMessenger(failure_prob=.05, avg_delay=1)
+    assembly = Assembly(n_proposers=1, n_acceptors=1)
+    result = assembly.start()
     print(result)
