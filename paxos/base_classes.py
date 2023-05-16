@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from threading import Event
-from datetime import datetime
+from time import sleep
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Any, Set, Optional
@@ -68,61 +68,86 @@ class Message:
 
 class Messenger(ABC):
     @abstractmethod
-    def send_message(self, id_: int, message: Message):
+    def register(self, agent_id: int) -> None:
+        """Registers a new agent so that any agent can send message to them."""
         pass
 
     @abstractmethod
-    def get_message(self, id_: int):
+    def send_message(self, id_: int, message: Message) -> None:
+        """Sends a message to an agent."""
+        pass
+
+    @abstractmethod
+    def get_message(self, id_: int) -> Optional[Message]:
+        """Allows an agent to get a message that was sent to them."""
         pass
 
 
 class ReliableMessenger(Messenger):
     def __init__(self):
-        self.delivered = defaultdict(list)
+        self.delivered = dict()
 
-    def send_message(self, id_: int, message: Message) -> None:
-        self.delivered[id_].append(message)
+    def register(self, agent_id: int) -> None:
+        """Registers a new agent so that any agent can send message to them."""
+        self.delivered[agent_id] = []
 
-    def get_message(self, id_: int) -> Optional[Message]:
-        if self.delivered[id_]:
-            return self.delivered[id_].pop(0)
+    def send_message(self, dest_id: int, message: Message) -> None:
+        """Sends a message to an agent."""
+        self.delivered[dest_id].append(message)
+
+    def get_message(self, dest_id: int) -> Optional[Message]:
+        """Allows an agent to get a message that was sent to them."""
+        if self.delivered[dest_id]:
+            return self.delivered[dest_id].pop(0)
         else:
             return None
 
 
 class UnreliableMessenger(Messenger):
-    def __init__(self, failure_prob: float = 0, avg_delay: float = 1):
-        self.delivered = defaultdict(list)
-        self.to_deliver = defaultdict(list)
-        self.failure_prob = failure_prob
+    def __init__(self, failure_rate: float = 0, avg_delay: float = 1):
+        self.failure_rate = failure_rate
         self.avg_delay = avg_delay
 
-    def send_message(self, id_: int, message: Message) -> None:
-        if random() > self.failure_prob:
-            self.to_deliver[id_].append(message)
+        self.delivered = dict()
+        self.to_deliver = dict()
 
-    def get_message(self, id_) -> Optional[Message]:
-        if self.delivered[id_]:
-            return self.delivered[id_].pop(0)
+    def register(self, agent_id: int):
+        """Registers a new agent so that any other agent can send message to them."""
+        self.to_deliver[agent_id] = []
+        self.delivered[agent_id] = []
+
+    def send_message(self, dest_id: int, message: Message) -> None:
+        """Sends a message to an agent."""
+        if random() > self.failure_rate:
+            self.to_deliver[dest_id].append(message)
+
+    def get_message(self, dest_id) -> Optional[Message]:
+        """Allows an agent to get a message that was sent to them."""
+        if self.delivered[dest_id]:
+            return self.delivered[dest_id].pop(0)
         else:
             return None
 
-    async def deliver_message(self, dest: int, message: Message):
-        print(f"[Messenger] [{datetime.now()}] Debut du transfert :", message)
+    async def deliver_message(self, dest_id: int, message: Message):
+        """Delivers a message: transfers it from `to_deliver' to `delivered'."""
+        # print(f"[Messenger] [{datetime.now()}] Debut du transfert :", message)
         delay = self.avg_delay * exponential()
         await asyncio.sleep(delay)
-        self.delivered[dest].append(message)
-        self.to_deliver[dest].remove(message)
-        print(f"[Messenger] [{datetime.now()}] Fin du transfert :", message)
+        self.delivered[dest_id].append(message)
+        try:
+            self.to_deliver[dest_id].remove(message)
+        except ValueError:
+            # This error can be raised if the addressee restarts, which empties its message lists
+            pass
+        # print(f"[Messenger] [{datetime.now()}] Fin du transfert :", message)
 
     async def _start(self, event: Event):
         while not event.is_set():
             if sum(self.to_deliver.values(), []):
                 to_do = []
-                for id_ in self.to_deliver.copy():
-                    for message in self.to_deliver[id_]:
-                        to_do.append(self.deliver_message(id_, message))
-                print(f"[Messenger] [{datetime.now()}]", len(to_do), "messages à délivrer")
+                for dest_id in self.to_deliver.copy():
+                    for message in self.to_deliver[dest_id]:
+                        to_do.append(self.deliver_message(dest_id, message))
                 await asyncio.gather(*to_do)
 
     def start(self, event: Event):
@@ -134,18 +159,32 @@ class UnreliableMessenger(Messenger):
 class Agent(ABC):
     counter = 0
 
-    def __init__(self, messenger: Messenger):
-        self.messenger = messenger
+    def __init__(self, messenger: Messenger, failure_rate: float = 0, avg_failure_duration: float = 5):
         self.ledger = None
+        self.messenger = messenger
+        self.failure_rate = failure_rate
+        self.avg_failure_duration = avg_failure_duration
+
         self.id = Agent.counter
         Agent.counter += 1
 
     def start(self, event: Event) -> None:
         print(f"Agent #{self.id} started ({self.__class__.__name__})")
+        self.messenger.register(self.id)
         while not event.is_set():
+            # Process messages received
             message = self.messenger.get_message(self.id)
             if message is not None:
                 self.process_message(message)
+            # And maybe fail
+            if random() < self.failure_rate:
+                print(f"Agent #{self.id} failed ({self.__class__.__name__})")
+                sleep(self.avg_failure_duration * exponential())
+                break
+
+        # If the agent failed, it starts again
+        if not event.is_set():
+            self.start(event)
 
     @abstractmethod
     def process_message(self, message: Message) -> None:

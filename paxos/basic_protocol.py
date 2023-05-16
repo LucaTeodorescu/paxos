@@ -1,33 +1,45 @@
 from __future__ import annotations
 from threading import Thread, Event
 from datetime import timedelta, datetime
-from typing import List
+from typing import List, Optional
 
 from paxos.base_classes import *
 
 
 class Proposer(Agent):
-    def __init__(self, messenger: Messenger, assembly: Assembly, period: timedelta = timedelta(seconds=30)):
-        super().__init__(messenger)
+    def __init__(self, messenger: Messenger, assembly: Assembly,
+                 failure_rate: float = 0, avg_failure_duration: float = 5,
+                 period: timedelta = timedelta(seconds=30)
+                 ):
+        super().__init__(messenger, failure_rate=failure_rate, avg_failure_duration=avg_failure_duration)
         # TODO: At which frequency should proposers initiate ballots?
         self.period = period
         self.assembly = assembly
         self.last_tried: Optional[Ballot] = None
         self.responses: List[Optional[Vote]] = list()
 
-    def start(self, event: Event):
-        print(f"Agent #{self.id} started ({self.__class__.__name__})")
-        # This definition for t0 allows the first ballot to be initiated 5 seconds after the Agent is started
+    def start(self, event: Event) -> None:
         t0 = datetime.now() - self.period + timedelta(seconds=5)
+        print(f"Agent #{self.id} started ({self.__class__.__name__})")
+        self.messenger.register(self.id)
         while not event.is_set():
-            # The agent checks if it has received messages
+            # Process messages received
             message = self.messenger.get_message(self.id)
             if message is not None:
                 self.process_message(message)
-            # And regularly starts a new ballot
+            # Regularly initiate ballots
             if datetime.now() - t0 >= self.period:
                 t0 = datetime.now()
                 self.initiate_new_ballot()
+            # And maybe fail
+            if random() < self.failure_rate:
+                print(f"Agent #{self.id} failed ({self.__class__.__name__})")
+                sleep(self.avg_failure_duration * exponential())
+                break
+
+        # If the agent failed, it starts again
+        if not event.is_set():
+            self.start(event)
 
     def process_message(self, message: Message):
         print(f"Agent #{self.id} received a {message.type} message from agent #{message.author_id}")
@@ -61,11 +73,15 @@ class Proposer(Agent):
 
     def on_voted(self, message: Message):
         # When the proposer receives a vote regarding its current ballot
-        # If the its ballot becomes successful, it sends a Success message to the whole assembly
-        if message.vote.ballot == self.last_tried and self.last_tried.successful:
-            response = Message(author_id=self.id, type=MessageType.Success, decree=self.last_tried.decree)
-            for agent in self.assembly.agents:
-                self.messenger.send_message(agent.id, response)
+        if message.vote.ballot == self.last_tried:
+            # It adds one voter
+            self.last_tried.voters.add(message.vote.acceptor)
+            # If the ballot becomes successful
+            if self.last_tried.successful:
+                # It sends a message to the whole assembly
+                response = Message(author_id=self.id, type=MessageType.Success, decree=self.last_tried.decree)
+                for agent in self.assembly.agents:
+                    self.messenger.send_message(agent.id, response)
 
     def initiate_new_ballot(self):
         if self.last_tried is None:
@@ -88,8 +104,11 @@ class Proposer(Agent):
 
 
 class Acceptor(Agent):
-    def __init__(self, messenger: Messenger):
-        super().__init__(messenger)
+    def __init__(self, messenger: Messenger, assembly: Assembly,
+                 failure_rate: float = 0, avg_failure_duration: float = 5,
+                 ):
+        super().__init__(messenger, failure_rate=failure_rate, avg_failure_duration=avg_failure_duration)
+        self.assembly: Assembly = assembly
         self.last_vote: Optional[Vote] = None
         self.next_ballot: Optional[BallotNumber] = None
 
@@ -115,9 +134,7 @@ class Acceptor(Agent):
 
     def on_beginballot(self, message: Message):
         # Upon receipt of a BeginBallot message,
-        # Priest q casts his vote un the ballot
-        message.ballot.voters.add(self)
-        # Sets last_vote[q] to this vote
+        # Priest q casts his vote un the ballot and sets last_vote[q] to this vote
         self.last_vote = Vote(message.ballot, self)
         # And sends a Voted message to the proposer
         response = Message(author_id=self.id, type=MessageType.Voted, vote=self.last_vote)
@@ -125,12 +142,18 @@ class Acceptor(Agent):
 
 
 class Assembly:
-    def __init__(self, n_proposers: int, n_acceptors: int, messenger: Messenger = ReliableMessenger()):
+    def __init__(
+            self,
+            n_proposers: int,
+            n_acceptors: int,
+            messenger: Messenger = ReliableMessenger(),
+            proposer_fail_rate: float = 0,
+            acceptor_fail_rate: float = 0
+            ):
         self.messenger = messenger
-        self.proposers = {Proposer(self.messenger, self) for _ in range(n_proposers)}
-        self.acceptors = {Acceptor(self.messenger) for _ in range(n_acceptors)}
+        self.proposers = {Proposer(self.messenger, self, failure_rate=proposer_fail_rate) for _ in range(n_proposers)}
+        self.acceptors = {Acceptor(self.messenger, self, failure_rate=acceptor_fail_rate) for _ in range(n_acceptors)}
         self.learners = {}  # TODO: Implement learners
-        # TODO: Implement failure of agents
         self.threads = list()
 
     @property
@@ -157,13 +180,12 @@ class Assembly:
         end.set()
 
         ledgers = set(agent.ledger.value for agent in self.agents)
-        assert len(ledgers) == 1,\
-            f"Failure : more than one proposal was accepted by a majority of voters ({ledgers})"
+        assert len(ledgers) == 1, f"Failure : more than one proposal was accepted by a majority of voters ({ledgers})"
         return ledgers.pop()
 
 
 if __name__ == '__main__':
-    messenger = UnreliableMessenger(failure_prob=0, avg_delay=1)
-    assembly = Assembly(n_proposers=1, n_acceptors=2, messenger=messenger)
+    messenger = UnreliableMessenger(failure_rate=0.05, avg_delay=1)
+    assembly = Assembly(n_proposers=1, n_acceptors=2, messenger=messenger, proposer_fail_rate=1e-8)
     result = assembly.start()
     print(result)
