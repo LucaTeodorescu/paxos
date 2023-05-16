@@ -57,8 +57,10 @@ class Proposer(Agent):
         if len(self.responses) == len(self.last_tried.quorum):
             # Sets the decree to satisfy B3
             responses = [r for r in self.responses if r is not None]
-            if responses:
+            if len(responses) >= 2:
                 self.last_tried.decree = max(*responses).ballot.decree
+            elif len(responses) == 1:
+                self.last_tried.decree = responses[0].ballot.decree
             else:
                 self.last_tried.decree = self.make_proposal()
 
