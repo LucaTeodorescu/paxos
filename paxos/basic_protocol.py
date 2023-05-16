@@ -2,6 +2,7 @@ from __future__ import annotations
 from threading import Thread, Event
 from datetime import timedelta, datetime
 from typing import List, Optional
+from numpy.random import choice
 
 from paxos.base_classes import *
 
@@ -88,7 +89,7 @@ class Proposer(Agent):
             b = BallotNumber(0, self.id)
         else:
             b = BallotNumber(self.last_tried.number.ballot_id + 1, self.id)
-        quorum = self.assembly.acceptors  # TODO: How to construct the quorum?
+        quorum = self.create_random_quorum()
         self.last_tried = Ballot(b, Proposal(None), quorum, set())
 
         message = Message(
@@ -98,6 +99,10 @@ class Proposer(Agent):
         )
         for acceptor in self.last_tried.quorum:
             self.messenger.send_message(acceptor.id, message)
+
+    def create_random_quorum(self):
+        m = len(self.assembly.acceptors) // 2 + 1
+        return set(choice(list(self.assembly.acceptors), m))
 
     def make_proposal(self):
         return Proposal(self.id)
@@ -186,6 +191,6 @@ class Assembly:
 
 if __name__ == '__main__':
     messenger = UnreliableMessenger(failure_rate=0.05, avg_delay=1)
-    assembly = Assembly(n_proposers=1, n_acceptors=2, messenger=messenger, proposer_fail_rate=1e-8)
+    assembly = Assembly(n_proposers=2, n_acceptors=5, messenger=messenger, proposer_fail_rate=1e-8)
     result = assembly.start()
     print(result)
