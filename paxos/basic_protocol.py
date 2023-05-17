@@ -52,31 +52,33 @@ class Proposer(Agent):
             self.on_success(message)
 
     def on_lastvote(self, message: Message):
-        self.responses.append(message.last_vote)
-        # If all responses are received
-        if len(self.responses) == len(self.last_tried.quorum):
-            # Sets the decree to satisfy B3
-            responses = [r for r in self.responses if r is not None]
-            if len(responses) >= 2:
-                self.last_tried.decree = max(*responses).ballot.decree
-            elif len(responses) == 1:
-                self.last_tried.decree = responses[0].ballot.decree
-            else:
-                self.last_tried.decree = self.make_proposal()
+        if message.ballot_number == self.last_tried.number:
+            self.responses.append(message.last_vote)
+            # If all responses are received
+            if len(self.responses) == len(self.last_tried.quorum):
+                # Sets the decree to satisfy B3
+                ballots = [v.ballot for v in self.responses if v is not None]
+                ballot_numbers = [b.number for b in ballots]
+                if ballots:
+                    max_number = max(ballot_numbers)
+                    max_ballot = [b for b in ballots if b.number == max_number][0]
+                    self.last_tried.decree = max_ballot.decree
+                else:
+                    self.last_tried.decree = self.make_proposal()
 
-            # Sends the BeginBallot message
-            reponse = Message(
-                author_id=self.id,
-                type=MessageType.BeginBallot,
-                ballot=self.last_tried,
-                decree=self.last_tried.decree,
-            )
-            for acceptor in self.last_tried.quorum:
-                self.messenger.send_message(acceptor.id, reponse)
+                # Sends the BeginBallot message
+                reponse = Message(
+                    author_id=self.id,
+                    type=MessageType.BeginBallot,
+                    ballot=self.last_tried,
+                    decree=self.last_tried.decree,
+                )
+                for acceptor in self.last_tried.quorum:
+                    self.messenger.send_message(acceptor.id, reponse)
 
     def on_voted(self, message: Message):
         # When the proposer receives a vote regarding its current ballot
-        if message.vote.ballot == self.last_tried:
+        if message.vote.ballot.number == self.last_tried.number:
             # It adds one voter
             self.last_tried.voters.add(message.vote.acceptor)
             # If the ballot becomes successful
@@ -94,6 +96,7 @@ class Proposer(Agent):
         quorum = self.create_random_quorum()
         print(f'{self} selected the following quorum : {quorum}')
         self.last_tried = Ballot(b, Proposal(None), quorum, set())
+        self.responses = list()
 
         message = Message(
             author_id=self.id,
