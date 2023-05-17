@@ -121,6 +121,8 @@ class UnreliableMessenger(Messenger):
         """Sends a message to an agent."""
         if dest_id in self.to_deliver and random() > self.failure_rate:
             self.to_deliver[dest_id].append(message)
+        else:
+            print(f"{message.author_id} failed to message {dest_id}")
 
     def get_message(self, dest_id) -> Optional[Message]:
         """Allows an agent to get a message that was sent to them."""
