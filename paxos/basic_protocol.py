@@ -195,7 +195,7 @@ class Assembly:
 
 
 if __name__ == '__main__':
-    messenger = UnreliableMessenger(failure_rate=0.05, avg_delay=1)
+    messenger = UnreliableMessenger(failure_rate=0.05, max_delay=10)
     assembly = Assembly(n_proposers=2, n_acceptors=5, messenger=messenger, proposer_fail_rate=1e-8)
     result = assembly.start()
     print(result)

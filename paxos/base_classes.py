@@ -105,9 +105,9 @@ class ReliableMessenger(Messenger):
 
 
 class UnreliableMessenger(Messenger):
-    def __init__(self, failure_rate: float = 0, avg_delay: float = 1):
+    def __init__(self, failure_rate: float = 0, max_delay: float = 10):
         self.failure_rate = failure_rate
-        self.avg_delay = avg_delay
+        self.max_delay = max_delay
 
         self.delivered = dict()
         self.to_deliver = dict()
@@ -134,7 +134,7 @@ class UnreliableMessenger(Messenger):
     async def deliver_message(self, dest_id: int, message: Message):
         """Delivers a message: transfers it from `to_deliver' to `delivered'."""
         # print(f"[Messenger] [{datetime.now()}] Debut du transfert :", message)
-        delay = self.avg_delay * exponential()
+        delay = min(self.max_delay, self.max_delay * exponential() / 2)
         await asyncio.sleep(delay)
         self.delivered[dest_id].append(message)
         try:
