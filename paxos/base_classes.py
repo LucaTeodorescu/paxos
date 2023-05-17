@@ -35,7 +35,7 @@ class Ballot:
         return self.quorum.issubset(self.voters)
 
 
-@dataclass(order=True)
+@dataclass
 class Vote:
     ballot: Ballot
     acceptor: Agent
