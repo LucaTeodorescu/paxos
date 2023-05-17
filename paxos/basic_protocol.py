@@ -10,7 +10,7 @@ from paxos.base_classes import *
 class Proposer(Agent):
     def __init__(self, messenger: Messenger, assembly: Assembly,
                  failure_rate: float = 0, avg_failure_duration: float = 5,
-                 period: timedelta = timedelta(seconds=30)
+                 period: timedelta = timedelta(seconds=60)
                  ):
         super().__init__(messenger, failure_rate=failure_rate, avg_failure_duration=avg_failure_duration)
         # TODO: At which frequency should proposers initiate ballots?
@@ -92,6 +92,7 @@ class Proposer(Agent):
         else:
             b = BallotNumber(self.last_tried.number.ballot_id + 1, self.id)
         quorum = self.create_random_quorum()
+        print(f'{self} selected the following quorum : {quorum}')
         self.last_tried = Ballot(b, Proposal(None), quorum, set())
 
         message = Message(
@@ -104,7 +105,7 @@ class Proposer(Agent):
 
     def create_random_quorum(self):
         m = len(self.assembly.acceptors) // 2 + 1
-        return set(choice(list(self.assembly.acceptors), m))
+        return set(choice(list(self.assembly.acceptors), m, replace=False))
 
     def make_proposal(self):
         return Proposal(self.id)
@@ -140,12 +141,11 @@ class Acceptor(Agent):
             self.messenger.send_message(message.author_id, response)
 
     def on_beginballot(self, message: Message):
-        # Upon receipt of a BeginBallot message,
-        # Priest q casts his vote un the ballot and sets last_vote[q] to this vote
-        self.last_vote = Vote(message.ballot, self)
-        # And sends a Voted message to the proposer
-        response = Message(author_id=self.id, type=MessageType.Voted, vote=self.last_vote)
-        self.messenger.send_message(message.author_id, response)
+        if message.ballot.number == self.next_ballot:
+            self.last_vote = Vote(message.ballot, self)
+            # And sends a Voted message to the proposer
+            response = Message(author_id=self.id, type=MessageType.Voted, vote=self.last_vote)
+            self.messenger.send_message(message.author_id, response)
 
 
 class Assembly:

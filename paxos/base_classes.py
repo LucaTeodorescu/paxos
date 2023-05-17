@@ -93,7 +93,8 @@ class ReliableMessenger(Messenger):
 
     def send_message(self, dest_id: int, message: Message) -> None:
         """Sends a message to an agent."""
-        self.delivered[dest_id].append(message)
+        if dest_id in self.delivered:
+            self.delivered[dest_id].append(message)
 
     def get_message(self, dest_id: int) -> Optional[Message]:
         """Allows an agent to get a message that was sent to them."""
@@ -118,7 +119,7 @@ class UnreliableMessenger(Messenger):
 
     def send_message(self, dest_id: int, message: Message) -> None:
         """Sends a message to an agent."""
-        if random() > self.failure_rate:
+        if dest_id in self.to_deliver and random() > self.failure_rate:
             self.to_deliver[dest_id].append(message)
 
     def get_message(self, dest_id) -> Optional[Message]:
@@ -167,6 +168,9 @@ class Agent(ABC):
 
         self.id = Agent.counter
         Agent.counter += 1
+
+    def __repr__(self):
+        return f'Agent #{self.id}'
 
     def start(self, event: Event) -> None:
         print(f"Agent #{self.id} started ({self.__class__.__name__})")
