@@ -158,10 +158,11 @@ class Assembly:
             n_acceptors: int,
             messenger: Messenger = ReliableMessenger(),
             proposer_fail_rate: float = 0,
-            acceptor_fail_rate: float = 0
+            acceptor_fail_rate: float = 0,
+            period_proposer: timedelta = timedelta(seconds=60)
             ):
         self.messenger = messenger
-        self.proposers = {Proposer(self.messenger, self, failure_rate=proposer_fail_rate) for _ in range(n_proposers)}
+        self.proposers = {Proposer(self.messenger, self, failure_rate=proposer_fail_rate, period=period_proposer) for _ in range(n_proposers)}
         self.acceptors = {Acceptor(self.messenger, self, failure_rate=acceptor_fail_rate) for _ in range(n_acceptors)}
         self.learners = {}  # TODO: Implement learners
         self.threads = list()
