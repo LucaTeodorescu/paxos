@@ -1,4 +1,5 @@
 from paxos.basic_protocol import *
+from datetime import timedelta
 import numpy as np
 import time
 import matplotlib.pyplot as plt
@@ -19,8 +20,13 @@ class Simulation:
                  proposer_fail_rate=0, 
                  messenger_max_delay=0.5
                  ):
-        self.messenger = UnreliableMessenger(failure_rate=messenger_failure_rate, max_delay=messenger_max_delay)
-        self.assembly = Assembly(n_proposers=n_proposers, n_acceptors=n_acceptors, messenger=self.messenger, proposer_fail_rate=proposer_fail_rate)
+        self.messenger = UnreliableMessenger(failure_rate=messenger_failure_rate, 
+                                             max_delay=messenger_max_delay)
+        self.assembly = Assembly(n_proposers=n_proposers, 
+                                 n_acceptors=n_acceptors, 
+                                 messenger=self.messenger, 
+                                 proposer_fail_rate=proposer_fail_rate, 
+                                 period_proposer=timedelta(seconds=messenger_max_delay*18)) # The 18 from page 13-14 of Leslie Lamport Part-Time Parliament paper
 
     def start(self):
         start_time = time.time()
