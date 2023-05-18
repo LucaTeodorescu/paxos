@@ -72,13 +72,23 @@ def acceptor_failure(precomputed=False):
         TIMES = pd.DataFrame(data=TIMES, columns=NB_ACCEPTORS, index=NB_PROPOSERS)
         TIMES.to_csv('number_of_nodes_acceptor_failure.csv')
 
+    fig, ax = plt.subplots(figsize=(7, 4))
+    sns.heatmap(data=TIMES, annot=True, fmt='.3g', cmap='seismic', square=True, ax=ax)
+    ax.set_ylabel("Number of proposers")
+    ax.set_yticklabels(NB_PROPOSERS)
+    ax.invert_yaxis()
+    ax.set_xlabel("Number of acceptors")
+    ax.set_xticklabels(NB_ACCEPTORS)
+    ax.set_title("Average time needed to reach consensus (seconds)")
+    fig.savefig('number_of_nodes_acceptor_failure.png')
+
     TIMES['Proposers'] = TIMES.index.to_series()
     TIMES = pd.melt(TIMES, id_vars=['Proposers'], value_vars=map(str, NB_ACCEPTORS), var_name='Acceptors', value_name='Time')
 
     fig, ax = plt.subplots(figsize=(6, 6))
     sns.lineplot(data=TIMES, x='Acceptors', y='Time', hue='Proposers', ax=ax)
     ax.set_title('Average time needed to achieve a consensus (seconds)')
-    fig.savefig('number_of_nodes_acceptor_failure.png')
+    fig.savefig('number_of_nodes_acceptor_failure_lineplot.png')
 
 
 # Failure from the proposers only
@@ -110,13 +120,23 @@ def proposer_failure(precomputed=False):
         TIMES = pd.DataFrame(data=TIMES, columns=NB_ACCEPTORS, index=NB_PROPOSERS)
         TIMES.to_csv('number_of_nodes_acceptor_failure.csv')
 
+    fig, ax = plt.subplots(figsize=(7, 7))
+    sns.heatmap(data=TIMES, annot=True, fmt='.3g', cmap='seismic', square=True, ax=ax)
+    ax.set_ylabel("Number of proposers")
+    ax.set_yticklabels(NB_PROPOSERS)
+    ax.invert_yaxis()
+    ax.set_xlabel("Number of acceptors")
+    ax.set_xticklabels(NB_ACCEPTORS)
+    ax.set_title("Average time needed to reach consensus (seconds)")
+    fig.savefig('number_of_nodes_proposer_failure.png')
+
     TIMES['Proposers'] = TIMES.index.to_series()
     TIMES = pd.melt(TIMES, id_vars=['Proposers'], value_vars=map(str, NB_ACCEPTORS), var_name='Acceptors', value_name='Time')
 
     fig, ax = plt.subplots(figsize=(6, 6))
     sns.lineplot(data=TIMES, x='Proposers', y='Time', hue='Acceptors', ax=ax)
     ax.set_title('Average time needed to achieve a consensus (seconds)')
-    fig.savefig('number_of_nodes_proposer_failure.png')
+    fig.savefig('number_of_nodes_proposer_failure_lineplot.png')
 
 
 if __name__ == '__main__':
