@@ -13,7 +13,6 @@ In this repo we propose a structure for the algorithm inside [paxos](https://git
 ## Getting started
 
 Follow these instructions to create a safe environnement for the project.
-**(This supposes you are using a unix OS ; Linux or Mac.)**
 
 
 Start by cloning the repo:
