@@ -10,6 +10,7 @@ NB_SIMULATION = 10
 FAILURE_RATE_RANGE = [0, 0.02, 0.04, 0.06, 0.08, 0.10]
 NB_ACCEPTORS = 5
 NB_PROPOSERS = 1
+precomputed = False
 
 
 class Simulation:
@@ -39,18 +40,23 @@ class Simulation:
 
 
 if __name__ == '__main__':
-    TIMES = []
-    for failure_rate in FAILURE_RATE_RANGE:
-        RESULTS = []
-        for i in range(NB_SIMULATION):
-            simul = Simulation(n_proposers=NB_PROPOSERS, n_acceptors=NB_ACCEPTORS, messenger_failure_rate = failure_rate, proposer_fail_rate=0, messenger_max_delay=0)
-            RESULTS.append(simul.start())
-        TIMES.append(np.mean(RESULTS))
-    df_TIMES = pd.DataFrame(data=TIMES, columns=NB_ACCEPTORS, index=NB_PROPOSERS)
-    df_TIMES.to_csv('failure_rate_no_print.csv')
+    if precomputed:
+        df_TIMES = pd.read_csv('experiments/failure_rate.csv')
+    else:
+        TIMES = []
+        for failure_rate in FAILURE_RATE_RANGE:
+            RESULTS = []
+            for i in range(NB_SIMULATION):
+                simul = Simulation(n_proposers=NB_PROPOSERS, n_acceptors=NB_ACCEPTORS, messenger_failure_rate = failure_rate, proposer_fail_rate=0, messenger_max_delay=0)
+                RESULTS.append(simul.start())
+            TIMES.append(np.mean(RESULTS))
+        df_TIMES = pd.DataFrame(data=TIMES)
+        df_TIMES.to_csv('experiments/failure_rate.csv')
     fig, ax = plt.subplots(figsize=(6, 6))
-    sns.lineplot(data=df_TIMES, x='Failure Rate', y='Time', hue='Proposers', ax=ax)
+    plt.plot(FAILURE_RATE_RANGE, TIMES)
+    plt.ylabel("Seconds")
+    plt.xlabel("Failure Rate")
     ax.set_title('Average time needed to achieve a consensus (seconds)')
-    fig.savefig('failure_rate_no_print.png')
+    fig.savefig('experiments/failure_rate.png')
     
 
