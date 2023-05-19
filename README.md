@@ -7,7 +7,8 @@
 
 ## Description
 
-Python code for a project for the "Eléments logiciels pour le traitement des données massives" course at ENSAE Paris
+Python code of a modelisation of the paxos algorithm of [Leslie Lamport's article](https://lamport.azurewebsites.net/pubs/lamport-paxos.pdf) (also [this one](https://lamport.azurewebsites.net/pubs/paxos-simple.pdf)). 
+In this repo we propose a structure for the algorithm inside [paxos](https://github.com/LucaTeodorescu/paxos/tree/main/paxos) and the experiments -aswell as the code- done with this structure inside [experiments](https://github.com/LucaTeodorescu/paxos/tree/main/experiments)
 
 ## Getting started
 
