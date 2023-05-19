@@ -17,7 +17,7 @@ class Proposer(Agent):
         self.assembly = assembly
         self.last_tried: List[Optional[Ballot]] = [None for _ in range(self.assembly.nb_instances)]
         self.responses: List[List[Optional[Vote]]] = [list() for _ in range(self.assembly.nb_instances)]
-        self.ledger: List[Optional[Ballot]] = [None for _ in range(self.assembly.nb_instances)]
+        self.ledger: List[Optional[Proposal]] = [None for _ in range(self.assembly.nb_instances)]
 
     def start(self, event: Event) -> None:
         t0 = datetime.now() - self.period + timedelta(seconds=5)

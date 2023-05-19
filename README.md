@@ -12,14 +12,19 @@ In this repo we propose a structure for the algorithm inside [paxos](https://git
 
 ## Getting started
 
-Follow these instructions to create a safe environnement for the project. 
-
-**(This supposes you are using a unix OS ; Linux or Mac)**
+Follow these instructions to create a safe environnement for the project.
+**(This supposes you are using a unix OS ; Linux or Mac.)**
 
 
 Start by cloning the repo:
 
 ```sh
 git clone https://github.com/lucateodorescu/paxos.git
+```
+
+and install the requirements:
+
+```shell
+pip install -r requirements.txt
 ```
 

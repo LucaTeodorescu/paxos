@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Any, Set, Optional
 from dataclasses import dataclass
-from collections import defaultdict
 from numpy.random import random, exponential
 
 
