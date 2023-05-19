@@ -13,7 +13,6 @@ class Proposer(Agent):
                  period: timedelta = timedelta(seconds=60)
                  ):
         super().__init__(messenger, failure_rate=failure_rate, avg_failure_duration=avg_failure_duration)
-        # TODO: At which frequency should proposers initiate ballots?
         self.period = period
         self.assembly = assembly
         self.last_tried: Optional[Ballot] = None
@@ -144,7 +143,9 @@ class Acceptor(Agent):
             self.messenger.send_message(message.author_id, response)
 
     def on_beginballot(self, message: Message):
+        # If the ballot is the one the acceptor is waiting for
         if message.ballot.number == self.next_ballot:
+            # It votes for it
             self.last_vote = Vote(message.ballot, self)
             # And sends a Voted message to the proposer
             response = Message(author_id=self.id, type=MessageType.Voted, vote=self.last_vote)
@@ -164,7 +165,6 @@ class Assembly:
         self.messenger = messenger
         self.proposers = {Proposer(self.messenger, self, failure_rate=proposer_fail_rate, period=period_proposer) for _ in range(n_proposers)}
         self.acceptors = {Acceptor(self.messenger, self, failure_rate=acceptor_fail_rate) for _ in range(n_acceptors)}
-        self.learners = {}  # TODO: Implement learners
         self.threads = list()
 
     @property
