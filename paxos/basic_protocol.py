@@ -169,7 +169,7 @@ class Assembly:
 
     @property
     def agents(self):
-        return self.proposers.union(self.acceptors).union(self.learners)
+        return self.proposers.union(self.acceptors)
 
     def start(self):
         end = Event()
