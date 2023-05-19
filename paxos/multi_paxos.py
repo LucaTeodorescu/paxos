@@ -129,4 +129,46 @@ class Acceptor(Agent):
 class Assembly:
     # TODO: almost the same, with an additional attribute nb_instances corresponding to
     #  the number of parallel instances of the basic protocol
+    def __init__(
+            self,
+            n_proposers: int,
+            n_acceptors: int,
+            nb_instances: int,
+            messenger: Messenger = ReliableMessenger(),
+            proposer_fail_rate: float = 0,
+            acceptor_fail_rate: float = 0,
+            period_proposer: timedelta = timedelta(seconds=60)
+            ):
+        self.messenger = messenger
+        self.proposers = {Proposer(self.messenger, self, failure_rate=proposer_fail_rate, period=period_proposer) for _ in range(n_proposers)}
+        self.acceptors = {Acceptor(self.messenger, self, failure_rate=acceptor_fail_rate) for _ in range(n_acceptors)}
+        self.threads = list()
+        self.nb_instances = nb_instances
+
+    @property
+    def agents(self):
+        return self.proposers.union(self.acceptors)
+
+    def start(self):
+        end = Event()
+        # We create a thread for the messenger if necessary
+        if isinstance(self.messenger, UnreliableMessenger):
+            # In this case, the messages are not delivered instantaneously
+            # The messenger needs its own thread so that it does not block the agents
+            self.threads.append(Thread(target=self.messenger.start, args=(end,), name="Messenger"))
+            self.threads[-1].start()
+        # And a thread for every agent
+        for agent in self.agents:
+            self.threads.append(Thread(target=agent.start, args=(end,), name=f'Agent #{agent.id}'))
+            self.threads[-1].start()
+
+        # We wait until a decision is made and all agents learn about it
+        while None in [single_ledger for agent in self.agents for single_ledger in agent.ledger]:
+            continue
+        # When it is the case, we stop all the threads 
+        end.set()
+
+        ledgers = set(agent.ledger.value for agent in self.agents)
+        assert len(ledgers) == 1, f"Failure : more than one proposal was accepted by a majority of voters ({ledgers})"
+        return ledgers.pop()
     pass
