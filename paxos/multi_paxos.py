@@ -15,8 +15,9 @@ class Proposer(Agent):
         super().__init__(messenger, failure_rate=failure_rate, avg_failure_duration=avg_failure_duration)
         self.period = period
         self.assembly = assembly
-        self.last_tried: List[Optional[Ballot]] = [None for _ in self.assembly.nb_instances]
-        self.responses: List[List[Optional[Vote]]] = [list() for _ in self.assembly.nb_instances]
+        self.last_tried: List[Optional[Ballot]] = [None for _ in range(self.assembly.nb_instances)]
+        self.responses: List[List[Optional[Vote]]] = [list() for _ in range(self.assembly.nb_instances)]
+        self.ledger: List[Optional[Ballot]] = [None for _ in range(self.assembly.nb_instances)]
 
     def start(self, event: Event) -> None:
         t0 = datetime.now() - self.period + timedelta(seconds=5)
@@ -135,7 +136,7 @@ class Proposer(Agent):
 
     def on_success(self, message) -> None:
         print(f"Agent #{self.id} was notified that decree {message.decree} was accepted.")
-        self.ledger[message.ballot_number % self.assembly.nb_instances] = message.decree
+        self.ledger[message.ballot_number.ballot_id % self.assembly.nb_instances] = message.decree
 
 
 class Acceptor(Agent):
@@ -146,6 +147,7 @@ class Acceptor(Agent):
         self.assembly: Assembly = assembly
         self.last_vote: List[Optional[Vote]] = [None for _ in range(self.assembly.nb_instances)]
         self.next_ballot: List[Optional[BallotNumber]] = [None for _ in range(self.assembly.nb_instances)]
+        self.ledger: List[Optional[Ballot]] = [None for _ in range(self.assembly.nb_instances)]
 
     def process_message(self, message: Message):
         print(f"Agent #{self.id} received a {message.type} message from agent #{message.author_id}")
@@ -172,7 +174,7 @@ class Acceptor(Agent):
 
     def on_beginballot(self, message: Message):
         # The acceptor first needs to find to which instance of the protocol the corresponding ballot number is related
-        idx = message.ballot_number.ballot_id % self.assembly.nb_instances
+        idx = message.ballot.number.ballot_id % self.assembly.nb_instances
         # If the ballot is the one the acceptor is waiting for (in this instance)
         if message.ballot.number == self.next_ballot[idx]:
             # It votes for it
@@ -183,12 +185,10 @@ class Acceptor(Agent):
 
     def on_success(self, message) -> None:
         print(f"Agent #{self.id} was notified that decree {message.decree} was accepted.")
-        self.ledger[message.ballot_number % self.assembly.nb_instances] = message.decree
+        self.ledger[message.ballot_number.ballot_id % self.assembly.nb_instances] = message.decree
 
 
 class Assembly:
-    # TODO: almost the same, with an additional attribute nb_instances corresponding to
-    #  the number of parallel instances of the basic protocol
     def __init__(
             self,
             n_proposers: int,
@@ -199,11 +199,12 @@ class Assembly:
             acceptor_fail_rate: float = 0,
             period_proposer: timedelta = timedelta(seconds=60)
             ):
+        self.nb_instances = nb_instances
         self.messenger = messenger
         self.proposers = {Proposer(self.messenger, self, failure_rate=proposer_fail_rate, period=period_proposer) for _ in range(n_proposers)}
         self.acceptors = {Acceptor(self.messenger, self, failure_rate=acceptor_fail_rate) for _ in range(n_acceptors)}
         self.threads = list()
-        self.nb_instances = nb_instances
+
 
     @property
     def agents(self):
@@ -228,7 +229,17 @@ class Assembly:
         # When it is the case, we stop all the threads 
         end.set()
 
-        ledgers = set(agent.ledger.value for agent in self.agents)
-        assert len(ledgers) == 1, f"Failure : more than one proposal was accepted by a majority of voters ({ledgers})"
-        return ledgers.pop()
-    pass
+        ledgers_unique = []
+        for agent in self.agents:
+            if agent.ledger not in ledgers_unique:
+                ledgers_unique.append(agent.ledger)
+        assert len(ledgers_unique) == 1,\
+            f"Failure : more than one proposal was accepted by a majority of voters ({ledgers_unique})"
+        return ledgers_unique.pop()
+
+
+if __name__ == '__main__':
+    messenger = UnreliableMessenger(failure_rate=0.05, max_delay=5)
+    assembly = Assembly(n_proposers=2, n_acceptors=5, nb_instances=2, messenger=messenger)
+    result = assembly.start()
+    print(result)
