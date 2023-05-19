@@ -51,8 +51,14 @@ class Proposer(Agent):
             self.on_success(message)
 
     def on_lastvote(self, message: Message):
-        if message.ballot_number in [ballot.number for ballot in self.last_tried]:
-            idx = [ballot.number for ballot in self.last_tried].index(message.ballot_number)
+        # The proposer checks whether the ballot number included in the message corresponds to
+        #  a ballot that it is currently organizing
+        idx = None
+        for ballot in self.last_tried:
+            if message.ballot_number == ballot.number:
+                idx = self.last_tried.index(ballot)
+        # If it is the case
+        if idx is not None:
             self.responses[idx].append(message.last_vote)
             # If all responses are received
             if len(self.responses[idx]) == len(self.last_tried[idx].quorum):
@@ -62,30 +68,39 @@ class Proposer(Agent):
                 if ballots:
                     max_number = max(ballot_numbers)
                     max_ballot = [b for b in ballots if b.number == max_number][0]
-                    self.last_tried.decree = max_ballot.decree
+                    self.last_tried[idx].decree = max_ballot.decree
                 else:
-                    self.last_tried.decree = self.make_proposal()
+                    self.last_tried[idx].decree = self.make_proposal()
 
                 # Sends the BeginBallot message
                 reponse = Message(
                     author_id=self.id,
                     type=MessageType.BeginBallot,
                     ballot=self.last_tried[idx],
-                    decree=self.last_tried.decree,
+                    decree=self.last_tried[idx].decree,
                 )
                 for acceptor in self.last_tried[idx].quorum:
                     self.messenger.send_message(acceptor.id, reponse)
 
     def on_voted(self, message: Message):
         # When the proposer receives a vote regarding its current ballot
-        if message.vote.ballot.number in [ballot.number for ballot in self.last_tried]:
-            idx = [ballot.number for ballot in self.last_tried].index(message.ballot_number)
+        idx = None
+        for ballot in self.last_tried:
+            if message.vote.ballot.number == ballot.number:
+                idx = self.last_tried.index(ballot)
+
+        if idx is not None:
             # It adds one voter
             self.last_tried[idx].voters.add(message.vote.acceptor)
             # If the ballot becomes successful
             if self.last_tried[idx].successful:
                 # It sends a message to the whole assembly
-                response = Message(author_id=self.id, type=MessageType.Success, decree=self.last_tried[idx].decree)
+                response = Message(
+                    author_id=self.id,
+                    type=MessageType.Success,
+                    decree=self.last_tried[idx].decree,
+                    ballot_number=self.last_tried[idx].number
+                )
                 for agent in self.assembly.agents:
                     self.messenger.send_message(agent.id, response)
 
@@ -94,11 +109,12 @@ class Proposer(Agent):
         print(f'{self} selected the following quorum : {quorum}')
 
         for idx in range(self.assembly.nb_instances):
+            # With this definition for ballot numbers, every ballot related to instance idx has a ballot_id such that
+            #  ballot_id % nb_instances == idx
             if self.last_tried[idx] is None:
-                b = BallotNumber(0, self.id)
+                b = BallotNumber(idx, self.id)
             else:
-                b = BallotNumber(self.last_tried[idx].number.ballot_id + 1, self.id)
-
+                b = BallotNumber(self.last_tried[idx].number.ballot_id + self.assembly.nb_instances, self.id)
             self.last_tried[idx] = Ballot(b, Proposal(None), quorum, set())
             self.responses[idx] = list()
 
@@ -117,13 +133,57 @@ class Proposer(Agent):
     def make_proposal(self):
         return Proposal(self.id)
 
+    def on_success(self, message) -> None:
+        print(f"Agent #{self.id} was notified that decree {message.decree} was accepted.")
+        self.ledger[message.ballot_number % self.assembly.nb_instances] = message.decree
+
 
 class Acceptor(Agent):
-    # TODO : implement the agents in a similar way: most of the attributes will be replace by lists
-    #  Acceptors can differentiate between the different instances:
-    #  if a ballot has a ballot number (ballot_id, agent_id) then
-    #  it is related to instance number ballot_id % nb_instances
-    pass
+    def __init__(self, messenger: Messenger, assembly: Assembly,
+                 failure_rate: float = 0, avg_failure_duration: float = 5,
+                 ):
+        super().__init__(messenger, failure_rate=failure_rate, avg_failure_duration=avg_failure_duration)
+        self.assembly: Assembly = assembly
+        self.last_vote: List[Optional[Vote]] = [None for _ in range(self.assembly.nb_instances)]
+        self.next_ballot: List[Optional[BallotNumber]] = [None for _ in range(self.assembly.nb_instances)]
+
+    def process_message(self, message: Message):
+        print(f"Agent #{self.id} received a {message.type} message from agent #{message.author_id}")
+        if message.type is MessageType.NextBallot:
+            self.on_nextballot(message)
+        elif message.type is MessageType.BeginBallot:
+            self.on_beginballot(message)
+        elif message.type is MessageType.Success:
+            self.on_success(message)
+
+    def on_nextballot(self, message: Message):
+        # The acceptor first needs to find to which instance of the protocol the corresponding ballot number is related
+        idx = message.ballot_number.ballot_id % self.assembly.nb_instances
+        # Then it checks whether it should react to this number in this instance or not
+        if self.next_ballot[idx] is None or message.ballot_number > self.next_ballot[idx]:
+            self.next_ballot[idx] = message.ballot_number
+            response = Message(
+                author_id=self.id,
+                type=MessageType.LastVote,
+                ballot_number=message.ballot_number,
+                last_vote=self.last_vote[idx]
+            )
+            self.messenger.send_message(message.author_id, response)
+
+    def on_beginballot(self, message: Message):
+        # The acceptor first needs to find to which instance of the protocol the corresponding ballot number is related
+        idx = message.ballot_number.ballot_id % self.assembly.nb_instances
+        # If the ballot is the one the acceptor is waiting for (in this instance)
+        if message.ballot.number == self.next_ballot[idx]:
+            # It votes for it
+            self.last_vote[idx] = Vote(message.ballot, self)
+            # And sends a Voted message to the proposer
+            response = Message(author_id=self.id, type=MessageType.Voted, vote=self.last_vote[idx])
+            self.messenger.send_message(message.author_id, response)
+
+    def on_success(self, message) -> None:
+        print(f"Agent #{self.id} was notified that decree {message.decree} was accepted.")
+        self.ledger[message.ballot_number % self.assembly.nb_instances] = message.decree
 
 
 class Assembly:
